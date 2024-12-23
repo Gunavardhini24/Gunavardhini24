@@ -1,0 +1,182 @@
+import sqlite3
+
+# Initialize database
+def init_db():
+    conn = sqlite3.connect("course_registration.db")
+    cursor = conn.cursor()
+    # Create tables
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS courses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            instructor TEXT NOT NULL,
+            slots INTEGER NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS enrollments (
+            student_id INTEGER,
+            course_id INTEGER,
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(course_id) REFERENCES courses(id),
+            PRIMARY KEY(student_id, course_id)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# Admin functions
+def add_course(name, instructor, slots):
+    conn = sqlite3.connect("course_registration.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO courses (name, instructor, slots) VALUES (?, ?, ?)", (name, instructor, slots))
+    conn.commit()
+    conn.close()
+    print("Course added successfully!")
+
+def view_courses():
+    conn = sqlite3.connect("course_registration.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, instructor, slots FROM courses")
+    courses = cursor.fetchall()
+    conn.close()
+    if courses:
+        print("\nAvailable Courses:")
+        for course in courses:
+            print(f"ID: {course[0]}, Name: {course[1]}, Instructor: {course[2]}, Slots: {course[3]}")
+    else:
+        print("\nNo courses available.")
+
+def delete_course(course_id):
+    conn = sqlite3.connect("course_registration.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM courses WHERE id = ?", (course_id,))
+    conn.commit()
+    conn.close()
+    print("Course deleted successfully!")
+
+# Student functions
+def register_student(name):
+    conn = sqlite3.connect("course_registration.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO students (name) VALUES (?)", (name,))
+    conn.commit()
+    conn.close()
+    print(f"Student '{name}' registered successfully!")
+
+def enroll_in_course(student_name, course_id):
+    conn = sqlite3.connect("course_registration.db")
+    cursor = conn.cursor()
+
+    # Check if student exists
+    cursor.execute("SELECT id FROM students WHERE name = ?", (student_name,))
+    student = cursor.fetchone()
+    if not student:
+        print("Student not found. Please register first.")
+        conn.close()
+        return
+
+    student_id = student[0]
+
+    # Check if course exists and has available slots
+    cursor.execute("SELECT slots FROM courses WHERE id = ?", (course_id,))
+    course = cursor.fetchone()
+    if not course:
+        print("Course not found.")
+        conn.close()
+        return
+
+    if course[0] <= 0:
+        print("No slots available for this course.")
+        conn.close()
+        return
+
+    # Enroll student
+    try:
+        cursor.execute("INSERT INTO enrollments (student_id, course_id) VALUES (?, ?)", (student_id, course_id))
+        cursor.execute("UPDATE courses SET slots = slots - 1 WHERE id = ?", (course_id,))
+        conn.commit()
+        print(f"Student '{student_name}' successfully enrolled in course ID {course_id}.")
+    except sqlite3.IntegrityError:
+        print("Student is already enrolled in this course.")
+
+    conn.close()
+
+def view_enrollments(student_name):
+    conn = sqlite3.connect("course_registration.db")
+    cursor = conn.cursor()
+
+    # Check if student exists
+    cursor.execute("SELECT id FROM students WHERE name = ?", (student_name,))
+    student = cursor.fetchone()
+    if not student:
+        print("Student not found.")
+        conn.close()
+        return
+
+    student_id = student[0]
+    cursor.execute("""
+        SELECT courses.name, courses.instructor
+        FROM enrollments
+        JOIN courses ON enrollments.course_id = courses.id
+        WHERE enrollments.student_id = ?
+    """, (student_id,))
+    enrollments = cursor.fetchall()
+    conn.close()
+
+    if enrollments:
+        print(f"\nEnrollments for '{student_name}':")
+        for course in enrollments:
+            print(f"Course: {course[0]}, Instructor: {course[1]}")
+    else:
+        print(f"\nNo courses enrolled for '{student_name}'.")
+
+# Main menu
+def main():
+    init_db()
+    while True:
+        print("\nOnline Course Registration System")
+        print("1. Admin - Add Course")
+        print("2. Admin - View Courses")
+        print("3. Admin - Delete Course")
+        print("4. Student - Register")
+        print("5. Student - Enroll in Course")
+        print("6. Student - View Enrollments")
+        print("7. Exit")
+
+        choice = input("Enter your choice: ")
+        if choice == "1":
+            name = input("Enter course name: ")
+            instructor = input("Enter instructor name: ")
+            slots = int(input("Enter number of slots: "))
+            add_course(name, instructor, slots)
+        elif choice == "2":
+            view_courses()
+        elif choice == "3":
+            course_id = int(input("Enter course ID to delete: "))
+            delete_course(course_id)
+        elif choice == "4":
+            name = input("Enter student name: ")
+            register_student(name)
+        elif choice == "5":
+            student_name = input("Enter your name: ")
+            course_id = int(input("Enter course ID to enroll: "))
+            enroll_in_course(student_name, course_id)
+        elif choice == "6":
+            student_name = input("Enter your name: ")
+            view_enrollments(student_name)
+        elif choice == "7":
+            print("Exiting... Goodbye!")
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
+# Run the program
+if __name__ == "__main__":
+    main()
