@@ -1,0 +1,80 @@
+import cv2
+import face_recognition
+import serial
+
+
+# Initialize serial communication (Adjust COM port and baud rate as per your setup)
+arduino = serial.Serial(port = 'COM4',baudrate= 9600, timeout=1)
+
+# Initialize the video capture
+video_capture = cv2.VideoCapture(0)
+
+# Variables for face position
+face_detected = False
+face_center_x = 0
+face_center_y = 0
+
+# Set thresholds for movement
+frame_center_x = video_capture.get(cv2.CAP_PROP_FRAME_WIDTH) / 2
+frame_center_y = video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT) / 2
+x_threshold = frame_center_x / 3  # Adjust the sensitivity by changing the divisor
+y_threshold = frame_center_y / 3  # Adjust the sensitivity by changing the divisor
+
+while True:
+    # Capture frame-by-frame
+    ret, frame = video_capture.read()
+    if not ret:
+        print("Failed to capture image")
+        break
+
+    # Flip the image horizontally for a selfie-view display, and convert the color space from BGR to RGB
+    frame = cv2.flip(frame, 1)
+
+    # Convert the image to RGB (face_recognition uses RGB format)
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    # Find all the faces and face encodings in the current frame
+    face_locations = face_recognition.face_locations(rgb_frame)
+
+    if face_locations:
+        face_detected = True
+        top, right, bottom, left = face_locations[0]
+        face_center_x = (left + right) // 2
+        face_center_y = (top + bottom) // 2
+
+        # Draw a rectangle around the face
+        cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+        cv2.circle(frame, (face_center_x, face_center_y), 5, (0, 255, 255), -1)
+
+        # Determine movement based on face position
+        if face_center_x < frame_center_x - x_threshold:
+            print("Turning Right")
+            arduino.write(b'R\n')
+        elif face_center_x > frame_center_x + x_threshold:
+            print("Turning Left")
+            arduino.write(b'L\n')
+        elif face_center_y < frame_center_y - y_threshold:
+            print("Moving forward")
+            arduino.write(b'F\n')
+        elif face_center_y > frame_center_y + y_threshold:
+            print("Moving backward")
+            arduino.write(b'B\n')
+        else:
+            print("Robot Stopped")
+            arduino.write(b'S\n')
+    else:
+        face_detected = False
+        print("Robot Stopped")
+       
+        arduino.write(b'S\n')
+
+    # Display the resulting frame
+    cv2.imshow('Video', frame)
+
+    # Press 'q' to quit
+    if cv2.waitKey(1) & 0xFF == 27:
+        break
+
+# Release the video capture asd close all OpenCV windows
+video_capture.release()
+cv2.destroyAllWindows()
